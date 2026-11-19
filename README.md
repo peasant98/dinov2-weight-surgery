@@ -14,7 +14,8 @@ distillation.** Every changed number was written in closed form.
 DINOv3 was never used to choose or fit an edit; it is only a reference row. Read the [caveats](#caveats) before
 quoting these numbers.
 
-<p align="center"><img src="assets/pca_motorbike.jpg" width="720"></p>
+<p align="center"><a href="assets/demo.mp4"><img src="assets/pca_motorbike.jpg" width="720"></a><br>
+<em>Click for the 40-second video (<a href="assets/demo.mp4">assets/demo.mp4</a>): feature PCA, semantic segmentation and video object segmentation, side by side.</em></p>
 
 ## Use the edited model
 
