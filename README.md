@@ -14,8 +14,8 @@ distillation.** Every changed number was written in closed form.
 DINOv3 was never used to choose or fit an edit; it is only a reference row. Read the [caveats](#caveats) before
 quoting these numbers.
 
-<p align="center"><a href="assets/demo.mp4"><img src="assets/pca_motorbike.jpg" width="720"></a><br>
-<em>Click for the 40-second video (<a href="assets/demo.mp4">assets/demo.mp4</a>): feature PCA, semantic segmentation and video object segmentation, side by side.</em></p>
+<p align="center"><img src="assets/demo.gif" width="720"><br>
+<em>Feature PCA, semantic segmentation and video object segmentation, side by side. Full quality: <a href="assets/demo.mp4">assets/demo.mp4</a>.</em></p>
 
 ## Use the edited model
 
@@ -69,8 +69,9 @@ segmentation), removing the positional subspace, and a Gram-matrix readout of an
 
 ## Caveats
 
-- **The keypoint gain is not label-free.** Edit 4 uses keypoint annotations of SPair-71k training pairs (60 pairs per
-  category), in closed form. The SPair test pairs, DAVIS and ADE20K were never used to fit anything.
+- **The keypoint test is fair.** Edit 4 is fit on SPair-71k *training* pairs (60 per category); the keypoint numbers
+  are measured on separate test pairs that were never used to fit or select anything, like any method evaluated on
+  SPair. DAVIS and ADE20K were never used to fit anything either.
 - **Only dense patch features were evaluated.** The class token and image-level tasks (k-NN / linear classification)
   were not tested and may be worse.
 - **These are our own evaluation protocols, not official benchmark numbers:** zero-shot nearest-neighbor keypoint
