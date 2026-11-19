@@ -1,0 +1,7 @@
+weights/
+__pycache__/
+*.pyc
+research/proxy/pos_imgs_*.pt
+research/rebuilt.pth
+research/verify/
+*.guard.log
