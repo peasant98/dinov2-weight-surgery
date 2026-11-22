@@ -19,7 +19,7 @@ PATCH = {"dinov3": 16}
 
 
 def patch(name):
-    return 16 if name.startswith("v3:") else PATCH.get(name, 14)
+    return 16 if name.startswith("v3:") or name == "wsp3" else PATCH.get(name, 14)
 
 
 def load(name):
@@ -33,6 +33,12 @@ def load(name):
         import dinov2_wsp
         w = WSP.parent / "weights/dinov2_vitl14_wsp.pth"
         return dinov2_wsp.dinov2_vitl14_wsp(weights=w if w.exists() else None).cuda()
+    if name == "wsp3":                                                               # the released DINOv3 edit
+        sys.path.insert(0, str(WSP.parent))
+        import dinov2_wsp
+        e = WSP.parent / "weights/dinov3_vitl16_wsp_edit.pth"
+        return dinov2_wsp.dinov3_vitl16_wsp(str(dc.DINOV3_W), edit=e if e.exists() else None,
+                                            dinov3_repo=str(dc.DINOV3_REPO), dinov3_source="local").cuda()
     if name in VARIANTS:
         x_fit = dc.to_batch(dc.load_images(8), 448)[:24].cuda()                    # dev scan frames (closed-form fits)
         return we.build_variant(dc.load_dinov2("dinov2_vitl14"), VARIANTS[name], x_fit, verbose=False).eval()
@@ -49,14 +55,16 @@ def to_tensor(images, hw):
 @torch.no_grad()
 def features(model, name, images, grid, bs=8, dtype=torch.float32):
     """(N, gh, gw, C) final-layer (normed) patch features, every model on the same gh x gw token grid."""
-    gh, gw = grid; p = patch(name); out = []
+    gh, gw = grid; p = patch(name); out = None
     for i in range(0, len(images), bs):
         x = to_tensor(images[i:i + bs], (gh * p, gw * p)).cuda()
         with torch.autocast("cuda", dtype=torch.bfloat16):
             L = os.environ.get("FEAT_LAYER")                                     # diagnostic only: an earlier block
             o = model.get_intermediate_layers(x, n=[int(L)] if L else 1, norm=True)[0]
-        out.append(o.float().reshape(len(x), gh, gw, -1).to(dtype).cpu())
-    return torch.cat(out)
+        if out is None:                                                          # one buffer, no list + cat peak
+            out = torch.empty(len(images), gh, gw, o.shape[-1], dtype=dtype)
+        out[i:i + len(x)] = o.float().reshape(len(x), gh, gw, -1).to(dtype).cpu()
+    return out
 
 
 def linear_probe(f, labs, ntr, K, ignore=255, steps=3000, bs=8192, seed=0, return_probe=False):
@@ -71,15 +79,18 @@ def linear_probe(f, labs, ntr, K, ignore=255, steps=3000, bs=8192, seed=0, retur
         soft.append(F.avg_pool2d(oh.permute(0, 3, 1, 2), R // G))
     soft = torch.cat(soft)                                                        # (N, K, G, G)
     X = f[:ntr].reshape(-1, f.shape[-1]); Y = soft[:ntr].permute(0, 2, 3, 1).reshape(-1, K)
-    keep = Y.sum(1) > 0.5; X, Y = X[keep], Y[keep] / Y[keep].sum(1, keepdim=True)
-    mu, sd = X.float().mean(0), X.float().std(0) + 1e-4
+    keep = Y.sum(1) > 0.5; idx = keep.nonzero()[:, 0]; Y = Y[keep] / Y[keep].sum(1, keepdim=True)
+    s1 = torch.zeros(X.shape[1], dtype=torch.float64); s2 = torch.zeros_like(s1)   # chunked stats, no float copy of X
+    for i in range(0, len(idx), 100000):
+        c = X[idx[i:i + 100000]].double(); s1 += c.sum(0); s2 += (c * c).sum(0)
+    n = len(idx); mu = (s1 / n).float(); sd = ((s2 - s1 * s1 / n) / (n - 1)).clamp_min(0).sqrt().float() + 1e-4
     lin = torch.nn.Linear(f.shape[-1], K).cuda()
     opt = torch.optim.AdamW(lin.parameters(), 1e-3, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
     g = torch.Generator().manual_seed(seed)
     for _ in range(steps):
-        j = torch.randint(0, len(X), (bs,), generator=g)
-        loss = -(Y[j].float().cuda() * F.log_softmax(lin(((X[j].float() - mu) / sd).cuda()), -1)).sum(-1).mean()
+        j = torch.randint(0, len(idx), (bs,), generator=g)
+        loss = -(Y[j].float().cuda() * F.log_softmax(lin(((X[idx[j]].float() - mu) / sd).cuda()), -1)).sum(-1).mean()
         opt.zero_grad(); loss.backward(); opt.step(); sched.step()
     conf = torch.zeros(K, K, dtype=torch.long)
     with torch.no_grad():
@@ -103,14 +114,19 @@ def ade_files(split="default", ntr=2000, nte=1000):
     tr = sorted((ADE_ROOT / "images/training").glob("*.jpg")); va = sorted((ADE_ROOT / "images/validation").glob("*.jpg"))
     files = list(rng.choice(tr, ntr, replace=False)) + list(rng.choice(va, nte, replace=False))
     used = set()
-    for seed in {"fresh2": [1], "fresh3": [1, 2], "unused": [1, 2]}.get(split, []):
+    for seed in {"fresh2": [1], "fresh3": [1, 2], "unused": [1, 2], "fresh4": [1, 2]}.get(split, []):
         used |= set(files); rng = np.random.default_rng(seed)
         if seed == 2:                 # all 2000 val images are used by now: probe-test on unused TRAINING images
             files = list(rng.choice([f for f in tr if f not in used], ntr + nte, replace=False))
         else:
             files = list(rng.choice([f for f in tr if f not in used], ntr, replace=False)) + \
                 list(rng.choice([f for f in va if f not in used], nte, replace=False))
-    if split == "unused":
+    if split in ("unused", "fresh4"):
         used |= set(files)
-        return [f for f in tr if f not in used]
+        unused = [f for f in tr if f not in used]
+        if split == "unused":
+            return unused
+        # fresh4 (round 11+): also excludes the 1000 images wsp_v3.seg_scatter fits on (seed 30)
+        fit = set(np.random.default_rng(30).choice(unused, 1000, replace=False))
+        return list(np.random.default_rng(4).choice([f for f in unused if f not in fit], ntr + nte, replace=False))
     return files

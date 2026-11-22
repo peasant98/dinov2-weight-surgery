@@ -5,3 +5,5 @@ research/proxy/pos_imgs_*.pt
 research/rebuilt.pth
 research/verify/
 *.guard.log
+research/proxy/scatter_cache
+research/rebuilt_v3.pth

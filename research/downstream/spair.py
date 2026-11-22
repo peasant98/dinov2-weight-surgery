@@ -2,8 +2,8 @@
 60 random test pairs per category (18 cats). Each image resized to a 40x40 token grid; a source keypoint's feature is
 bilinearly sampled, matched by cosine argmax over target patches; PCK@0.1 / @0.05 of max(target bbox side), per keypoint.
 usage: spair.py <out.json> [test|val] [per_cat]   (MODELS env = comma list)"""
-import os
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +18,7 @@ import common as C  # noqa: E402
 ROOT = Path(os.environ.get("WSP_DATA", str(Path.home() / "Downloads"))) / "benchmarks/spair/SPair-71k"
 SPLIT = sys.argv[2] if len(sys.argv) > 2 else "test"
 G, PER_CAT = 40, int(sys.argv[3]) if len(sys.argv) > 3 else 60
-FRESH = SPLIT in ("test_fresh", "test_fresh2", "test_fresh3", "test_fresh4", "test_fresh5")              # pairs disjoint from the 60/cat (seed 0) already used
+FRESH = SPLIT in ("test_fresh", "test_fresh2", "test_fresh3", "test_fresh4", "test_fresh5", "test_fresh6", "test_fresh7")              # pairs disjoint from the 60/cat (seed 0) already used
 files = sorted((ROOT / "PairAnnotation" / ("test" if FRESH else SPLIT)).glob("*.json"))
 bycat = {}
 for f in files:
@@ -28,7 +28,7 @@ chosen = [f for c in sorted(bycat) for f in rng.choice(bycat[c], min(PER_CAT, le
 if FRESH:
     used = set(chosen); rng = np.random.default_rng(1)
     chosen = [f for c in sorted(bycat) for f in rng.choice([x for x in bycat[c] if x not in used], PER_CAT, replace=False)]
-    for seed in {"test_fresh2": [2], "test_fresh3": [2, 3], "test_fresh4": [2, 3, 4], "test_fresh5": [2, 3, 4, 5]}.get(SPLIT, []):   # disjoint from all earlier draws
+    for seed in {"test_fresh2": [2], "test_fresh3": [2, 3], "test_fresh4": [2, 3, 4], "test_fresh5": [2, 3, 4, 5], "test_fresh6": [2, 3, 4, 5, 6], "test_fresh7": [2, 3, 4, 5, 6, 7]}.get(SPLIT, []):   # disjoint from all earlier draws
         used |= set(chosen); rng = np.random.default_rng(seed)
         chosen = [f for c in sorted(bycat) for f in rng.choice([x for x in bycat[c] if x not in used], PER_CAT, replace=False)]
 pairs = [json.load(open(f)) for f in chosen]
