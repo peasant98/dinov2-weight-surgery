@@ -175,7 +175,10 @@ MODELS=stock,wsp python ade_probe.py out_ade.json fresh3          # semantic seg
 ```
 
 DINOv3: the released edit loads bit-for-bit identical to the model that was tested, and the keypoint test run through
-the released loader reproduces the table (PCK@0.1 0.6328). The DINOv3 edit is fit on public data only.
+the released loader reproduces the table (PCK@0.1 0.6328). The DINOv3 edit is fit on public data only. A rebuild from scratch with
+`build_v3.py` gave a patch-feature cosine of 0.99988 to the release, not bit for bit: the SPair total scatter is
+estimated from a random sample of 200,000 tokens (`wsp_v3.spair_scatter`, unseeded), and it is the only statistic
+that differed between our two runs.
 
 DINOv2: a rebuild matches the released weights closely but not bit for bit: our own rerun with the same calibration
 images gave a patch-feature cosine of 0.9998 to the release. Those calibration images were frames of our own video
